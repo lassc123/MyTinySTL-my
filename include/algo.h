@@ -684,5 +684,74 @@ void generate_n(ForwardIter first, size_t n, Generator gen) {
     *first = gen();
   }
 }
+/*****************************************************************************************/
+// includes
+// 判断序列一S1 是否包含序列二S2
+/*****************************************************************************************/
+template <class InputIter1, class InputIter2>
+bool includes(InputIter1 first1, InputIter1 last1, InputIter2 first2,
+              InputIter2 last2) {
+  while (first1 != last1 && first2 != last2) {
+    if (*first2 < *first1)
+      return false;
+    else if (*first1 < *first2)
+      ++first1;
+    else {
+      ++first1;
+      ++first2;
+    }
+  }
+  return first2 == last2;
+}
+// 重载版本使用函数对象 comp 代替比较操作
+template <class InputIter1, class InputIter2, class Compared>
+bool includes(InputIter1 first1, InputIter1 last1, InputIter2 first2,
+              InputIter2 last2, Compared comp) {
+  while (first1 != last1 && first2 != last2) {
+    if (comp(*first2, *first1))
+      return false;
+    else if (comp(*first1, *first2))
+      ++first1;
+    else {
+      ++first1;
+      ++first2;
+    }
+  }
+  return first2 == last2;
+}
+
+/*****************************************************************************************/
+// is_heap
+// 检查[first, last)内的元素是否为一个堆，如果是，则返回 true
+/*****************************************************************************************/
+template <class RandomIter> bool is_heap(RandomIter first, RandomIter last) {
+  auto n = mystl::distance(first, last);
+  auto parent = 0;
+  for (auto child = 1; child < n; ++child) {
+    if (first[parent] < first[child]) {
+      return false;
+    }
+    if ((child & 1) == 0) {
+      ++parent;
+    }
+  }
+  return true;
+}
+// 重载版本使用函数对象 comp 代替比较操作
+template <class RandomIter, class Compared>
+bool is_heap(RandomIter first, RandomIter last, Compared comp) {
+  auto n = mystl::distance(first, last);
+  auto parent = 0;
+  for (auto child = 1; child < n; ++child) {
+    if (comp(first[parent], first[child])) {
+      return false;
+    }
+    if ((child & 1) == 0) {
+      ++parent;
+    }
+  }
+  return true;
+}
+
 } // namespace mystl
 #endif // !MYTINYSTL_ALGO_H_

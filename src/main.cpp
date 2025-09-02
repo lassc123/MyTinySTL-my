@@ -1,3 +1,4 @@
+#include "../include/algo.h"
 #include "../include/algobase.h"
 #include "../include/allocator.h"
 #include "../include/construct.h"
@@ -17,5 +18,7 @@ int main(int argc, char **argv) {
   std::cout << "pair1.second: " << pair1.second << std::endl;
   mystl::pair<int, double> pair2(pair1);
   std::cout << "hello world!" << std::endl;
+  // mystl::rotate_dispatch(ForwardIter first, ForwardIter middle, ForwardIter
+  // last, mystl::forward_iterator_tag)
   return 0;
 }

@@ -1,6 +1,0 @@
-[
-{
-  "directory": "/home/sh704/Code/C++/MyTinySTL",
-  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-g", "-O0", "-o", "build/.objs/MyTinySTL/linux/x86_64/debug/src/main.cpp.o", "src/main.cpp"],
-  "file": "src/main.cpp"
-}]

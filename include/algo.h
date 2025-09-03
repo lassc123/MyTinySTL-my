@@ -1114,5 +1114,77 @@ rotate_dispatch(BidirectionalIter first, BidirectionalIter middle,
     return first;
   }
 }
+// 求最大公因子
+template <class EuclideanRingElement>
+EuclideanRingElement rgcd(EuclideanRingElement m, EuclideanRingElement n) {
+  while (n != 0) {
+    auto t = m % n;
+    m = n;
+    n = t;
+  }
+  return m;
+}
+// rotate_dispatch 的 random_access_iterator_tag 版本
+// rotate_dispatch 的 random_access_iterator_tag 版本
+template <class RandomIter>
+RandomIter rotate_dispatch(RandomIter first, RandomIter middle, RandomIter last,
+                           random_access_iterator_tag) {
+  // 因为是 random access iterator，我们可以确定每个元素的位置
+  auto n = last - first;
+  auto l = middle - first;
+  auto r = n - l;
+  auto result = first + (last - middle);
+  if (l == r) {
+    mystl::swap_ranges(first, middle, middle);
+    return result;
+  }
+  auto cycle_times = rgcd(n, l);
+  for (auto i = 0; i < cycle_times; ++i) {
+    auto tmp = *first;
+    auto p = first;
+    if (l < r) {
+      for (auto j = 0; j < r / cycle_times; ++j) {
+        if (p > first + r) {
+          *p = *(p - r);
+          p -= r;
+        }
+        *p = *(p + l);
+        p += l;
+      }
+    } else {
+      for (auto j = 0; j < l / cycle_times - 1; ++j) {
+        if (p < last - l) {
+          *p = *(p + l);
+          p += l;
+        }
+        *p = *(p - r);
+        p -= r;
+      }
+    }
+    *p = tmp;
+    ++first;
+  }
+  return result;
+}
+template <class ForwardIter>
+ForwardIter rotate(ForwardIter first, ForwardIter middle, ForwardIter last) {
+  if (first == middle) {
+    return last;
+  }
+  if (middle == last) {
+    return first;
+  }
+  return rotate_dispatch(first, middle, last, iterator_category(first));
+}
+/*****************************************************************************************/
+// rotate_copy
+// 行为与 rotate 类似，不同的是将结果复制到 result 所指的容器中
+/*****************************************************************************************/
+template <class ForwardIter, class OutputIter>
+OutputIter rotate_copy(ForwardIter first, ForwardIter middle, ForwardIter last,
+                       OutputIter result) {
+  result = mystl::copy(middle, last, result);
+  return mystl::copy(first, middle, result);
+}
 } // namespace mystl
 #endif // !MYTINYSTL_ALGO_H_

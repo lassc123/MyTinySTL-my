@@ -1451,5 +1451,309 @@ void merge_without_buffer(BidirectionalIter first, BidirectionalIter middle,
   mystl::merge_without_buffer(new_middle, second_cut, last, len1 - len11,
                               len2 - len22);
 }
+
+template <class BidirectionalIter1, class BidirectionalIter2>
+BidirectionalIter1
+merge_backward(BidirectionalIter1 first1, BidirectionalIter1 last1,
+               BidirectionalIter2 first2, BidirectionalIter2 last2,
+               BidirectionalIter1 result) {
+  if (first1 == last1)
+    return mystl::copy_backward(first2, last2, result);
+  if (first2 == last2)
+    return mystl::copy_backward(first1, last1, result);
+  --last1;
+  --last2;
+  while (true) {
+    if (*last2 < *last1) {
+      *--result = *last1;
+      if (first1 == last1)
+        return mystl::copy_backward(first2, ++last2, result);
+      --last1;
+    } else {
+      *--result = *last2;
+      if (first2 == last2)
+        return mystl::copy_backward(first1, ++last1, result);
+      --last2;
+    }
+  }
+}
+template <class BidirectionalIter1, class BidirectionalIter2, class Distance>
+BidirectionalIter1
+rotate_adaptive(BidirectionalIter1 first, BidirectionalIter1 middle,
+                BidirectionalIter1 last, Distance len1, Distance len2,
+                BidirectionalIter2 buffer, Distance buffer_size) {
+  BidirectionalIter2 buffer_end;
+  if (len1 > len2 && len2 <= buffer_size) {
+    // 后半段较短且能放入缓冲区
+    buffer_end = mystl::copy(middle, last, buffer);
+    mystl::copy_backward(first, middle, last);
+    return mystl::copy(buffer, buffer_end, first);
+  } else if (len1 <= buffer_size) {
+    // 前半段较短且能放入缓冲区
+    buffer_end = mystl::copy(first, middle, buffer);
+    mystl::copy(middle, last, first);
+    return mystl::copy_backward(buffer, buffer_end, last);
+  } else {
+    // 两段都较长，无法放入缓冲区
+    return mystl::merge_without_buffer(first, middle, last, len1, len2), first;
+  }
+}
+// 有缓冲区的情况下合并
+template <class BidirectionalIter, class Distance, class Pointer>
+void merge_adaptive(BidirectionalIter first, BidirectionalIter middle,
+                    BidirectionalIter last, Distance len1, Distance len2,
+                    Pointer buffer, Distance buffer_size) {
+  if (len1 <= len2 && len1 <= buffer_size) {
+    Pointer buffer_end = mystl::copy(first, middle, buffer);
+    mystl::merge(buffer, buffer_end, middle, last, first);
+  } else if (len2 <= buffer_size) {
+    Pointer buffer_end = mystl::copy(middle, last, buffer);
+    mystl::merge_backward(first, middle, buffer, buffer_end, last);
+  } else {
+    mystl::merge_without_buffer(first, middle, last, len1, len2);
+  }
+}
+
+template <class BidirectionalIter, class T>
+void inplace_merge_aux(BidirectionalIter first, BidirectionalIter middle,
+                       BidirectionalIter last, T *) {
+  auto len1 = mystl::distance(first, middle);
+  auto len2 = mystl::distance(middle, last);
+  temporary_buffer<BidirectionalIter, T> buf(first, last);
+  if (!buf.begin()) {
+    mystl::merge_without_buffer(first, middle, last, len1, len2);
+  } else {
+    mystl::merge_adaptive(first, middle, last, len1, len2, buf.begin(),
+                          buf.size());
+  }
+}
+
+template <class BidirectionalIter>
+void inplace_merge(BidirectionalIter first, BidirectionalIter middle,
+                   BidirectionalIter last) {
+  if (first == middle || middle == last)
+    return;
+  mystl::inplace_merge_aux(first, middle, last, value_type(first));
+}
+// 重载版本使用函数对象 comp 代替比较操作
+// 没有缓冲区的情况下合并
+template <class BidirectionalIter, class Distance, class Compared>
+void merge_without_buffer(BidirectionalIter first, BidirectionalIter middle,
+                          BidirectionalIter last, Distance len1, Distance len2,
+                          Compared comp) {
+  if (len1 == 0 || len2 == 0)
+    return;
+  if (len1 + len2 == 2) {
+    if (comp(*middle, *first))
+      mystl::iter_swap(first, middle);
+    return;
+  }
+  auto first_cut = first;
+  auto second_cut = middle;
+  Distance len11 = 0;
+  Distance len22 = 0;
+  if (len1 > len2) {
+    len11 = len1 >> 1;
+    mystl::advance(first_cut, len11);
+    second_cut = mystl::lower_bound(middle, last, *first_cut, comp);
+    len22 = mystl::distance(middle, second_cut);
+  } else {
+    len22 = len2 >> 1;
+    mystl::advance(second_cut, len22);
+    first_cut = mystl::upper_bound(first, middle, *second_cut, comp);
+    len11 = mystl::distance(first, first_cut);
+  }
+  auto new_middle = mystl::rotate(first_cut, middle, second_cut);
+  mystl::merge_without_buffer(first, first_cut, new_middle, len11, len22, comp);
+  mystl::merge_without_buffer(new_middle, second_cut, last, len1 - len11,
+                              len2 - len22, comp);
+}
+
+template <class BidirectionalIter1, class BidirectionalIter2, class Compared>
+BidirectionalIter1
+merge_backward(BidirectionalIter1 first1, BidirectionalIter1 last1,
+               BidirectionalIter2 first2, BidirectionalIter2 last2,
+               BidirectionalIter1 result, Compared comp) {
+  if (first1 == last1)
+    return mystl::copy_backward(first2, last2, result);
+  if (first2 == last2)
+    return mystl::copy_backward(first1, last1, result);
+  --last1;
+  --last2;
+  while (true) {
+    if (comp(*last2, *last1)) {
+      *--result = *last1;
+      if (first1 == last1)
+        return mystl::copy_backward(first2, ++last2, result);
+      --last1;
+    } else {
+      *--result = *last2;
+      if (first2 == last2)
+        return mystl::copy_backward(first1, ++last1, result);
+      --last2;
+    }
+  }
+}
+
+// 有缓冲区的情况下合并
+template <class BidirectionalIter, class Distance, class Pointer,
+          class Compared>
+void merge_adaptive(BidirectionalIter first, BidirectionalIter middle,
+                    BidirectionalIter last, Distance len1, Distance len2,
+                    Pointer buffer, Distance buffer_size, Compared comp) {
+  // 区间长度足够放进缓冲区
+  if (len1 <= len2 && len1 <= buffer_size) {
+    Pointer buffer_end = mystl::copy(first, middle, buffer);
+    mystl::merge(buffer, buffer_end, middle, last, first, comp);
+  } else if (len2 <= buffer_size) {
+    Pointer buffer_end = mystl::copy(middle, last, buffer);
+    mystl::merge_backward(first, middle, buffer, buffer_end, last, comp);
+  } else { // 区间长度太长，分割递归处理
+    auto first_cut = first;
+    auto second_cut = middle;
+    Distance len11 = 0;
+    Distance len22 = 0;
+    if (len1 > len2) {
+      len11 = len1 >> 1;
+      mystl::advance(first_cut, len11);
+      second_cut = mystl::lower_bound(middle, last, *first_cut, comp);
+      len22 = mystl::distance(middle, second_cut);
+    } else {
+      len22 = len2 >> 1;
+      mystl::advance(second_cut, len22);
+      first_cut = mystl::upper_bound(first, middle, *second_cut, comp);
+      len11 = mystl::distance(first, first_cut);
+    }
+    auto new_middle =
+        mystl::rotate_adaptive(first_cut, middle, second_cut, len1 - len11,
+                               len22, buffer, buffer_size);
+    mystl::merge_adaptive(first, first_cut, new_middle, len11, len22, buffer,
+                          buffer_size, comp);
+    mystl::merge_adaptive(new_middle, second_cut, last, len1 - len11,
+                          len2 - len22, buffer, buffer_size, comp);
+  }
+}
+
+template <class BidirectionalIter, class T, class Compared>
+void inplace_merge_aux(BidirectionalIter first, BidirectionalIter middle,
+                       BidirectionalIter last, T *, Compared comp) {
+  auto len1 = mystl::distance(first, middle);
+  auto len2 = mystl::distance(middle, last);
+  temporary_buffer<BidirectionalIter, T> buf(first, last);
+  if (!buf.begin()) {
+    mystl::merge_without_buffer(first, middle, last, len1, len2, comp);
+  } else {
+    mystl::merge_adaptive(first, middle, last, len1, len2, buf.begin(),
+                          buf.size(), comp);
+  }
+}
+
+template <class BidirectionalIter, class Compared>
+void inplace_merge(BidirectionalIter first, BidirectionalIter middle,
+                   BidirectionalIter last, Compared comp) {
+  if (first == middle || middle == last)
+    return;
+  mystl::inplace_merge_aux(first, middle, last, value_type(first), comp);
+}
+/*****************************************************************************************/
+// partial_sort
+// 对整个序列做部分排序，保证较小的 N 个元素以递增顺序置于[first, first + N)中
+/*****************************************************************************************/
+template <class RandomIter>
+void partial_sort(RandomIter first, RandomIter middle, RandomIter last) {
+  mystl::make_heap(first, middle);
+  for (auto i = middle; i < last; ++i) {
+    if (*i < *first) {
+      mystl::pop_heap_aux(first, middle, i, *i, distance_type(first));
+    }
+  }
+  mystl::sort_heap(first, middle);
+}
+
+// 重载版本使用函数对象 comp 代替比较操作
+template <class RandomIter, class Compared>
+void partial_sort(RandomIter first, RandomIter middle, RandomIter last,
+                  Compared comp) {
+  mystl::make_heap(first, middle);
+  for (auto i = middle; i < last; ++i) {
+    if (comp(*i, *first)) {
+      mystl::pop_heap_aux(first, middle, i, *i, distance_type(first), comp);
+    }
+  }
+  mystl::sort_heap(first, middle, comp);
+}
+
+/*****************************************************************************************/
+// partial_sort_copy
+// 行为与 partial_sort 类似，不同的是把排序结果复制到 result 容器中
+/*****************************************************************************************/
+template <class InputIter, class RandomIter, class Distance>
+RandomIter psort_copy_aux(InputIter first, InputIter last,
+                          RandomIter result_first, RandomIter resutl_last,
+                          Distance *) {
+  if (result_first == resutl_last) {
+    return resutl_last;
+  }
+  auto result_iter = result_first;
+  while (first != last && result_iter != resutl_last) {
+    *result_iter++ = *first++;
+  }
+  mystl::make_heap(result_first, resutl_last);
+  while (first != last) {
+    if (*first < *result_first) {
+      mystl::adjust_heap(result_first, static_cast<Distance>(0),
+                         result_iter - result_first, *first);
+    }
+    ++first;
+  }
+  mystl::sort_heap(result_first, result_iter);
+  return result_iter;
+}
+
+template <class InputIter, class RandomIter>
+RandomIter partial_sort_copy(InputIter first, InputIter last,
+                             RandomIter result_first, RandomIter result_last) {
+  return psort_copy_aux(first, last, result_first, result_last,
+                        distance_type(result_first));
+}
+
+// 重载版本使用函数对象 comp 代替比较操作
+template <class InputIter, class RandomIter, class Distance, class Compared>
+RandomIter psort_copy_aux(InputIter first, InputIter last,
+                          RandomIter result_first, RandomIter resutl_last,
+                          Distance *, Compared comp) {
+  if (result_first == resutl_last) {
+    return resutl_last;
+  }
+  auto result_iter = result_first;
+  while (first != last && result_iter != resutl_last) {
+    *result_iter++ = *first++;
+  }
+  mystl::make_heap(result_first, resutl_last);
+  while (first != last) {
+    if (comp(*first, *result_first)) {
+      mystl::adjust_heap(result_first, static_cast<Distance>(0),
+                         result_iter - result_first, *first, comp);
+    }
+    ++first;
+  }
+  mystl::sort_heap(result_first, result_iter, comp);
+  return result_iter;
+}
+
+template <class InputIter, class RandomIter, class Compared>
+RandomIter partial_sort_copy(InputIter first, InputIter last,
+                             RandomIter result_first, RandomIter result_last,
+                             Compared comp) {
+  return psort_copy_aux(first, last, result_first, result_last,
+                        distance_type(result_first), comp);
+}
+
+/*****************************************************************************************/
+// partition
+// 对区间内的元素重排，被一元条件运算判定为 true 的元素会放到区间的前段
+// 该函数不保证元素的原始相对位置
+/*****************************************************************************************/
+
 } // namespace mystl
 #endif // !MYTINYSTL_ALGO_H_

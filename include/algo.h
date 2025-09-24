@@ -1850,5 +1850,156 @@ void intro_sort(RandomIter first, RandomIter last, Size depth_limit) {
     last = cut;
   }
 }
+
+// 插入排序辅助函数unchecked_linear_insert
+template <class RandomIter, class T>
+void unchecked_linear_insert(RandomIter last, const T &value) {
+  auto next = last;
+  --next;
+  while (value < *next) {
+    *last = *next;
+    last = next;
+    --next;
+  }
+  *last = value;
+}
+
+// 插入排序函数 unchecked_insertion_sort
+template <class RandomIter>
+void unchecked_insertion_sort(RandomIter first, RandomIter last) {
+  for (auto i = first; i != last; ++i) {
+    mystl::unchecked_linear_insert(i, *i);
+  }
+}
+
+// 插入排序函数insertion_sort
+template <class RandomIter>
+void insertion_sort(RandomIter first, RandomIter last) {
+  if (first == last) {
+    return;
+  }
+  for (auto i = first + 1; i != last; ++i) {
+    auto value = *i;
+    if (value < *first) {
+      mystl::copy_backward(first, i, i + 1);
+      *first = value;
+    } else {
+      mystl::unchecked_linear_insert(i, value);
+    }
+  }
+}
+
+// 最终插入排序函数final_insertion_sort
+template <class RandomIter>
+void final_insertion_sort(RandomIter first, RandomIter last) {
+  if (static_cast<size_t>(last - first) > kSmallSectionSize) {
+    mystl::insertion_sort(first, first + kSmallSectionSize);
+    mystl::unchecked_insertion_sort(first + kSmallSectionSize, last);
+  } else {
+    mystl::insertion_sort(first, last);
+  }
+}
+
+template <class RandomIter> void sort(RandomIter first, RandomIter last) {
+  if (first != last) {
+    // 内省式排序，将区间分为一个个小小区间，然后对整体进行插入排序
+    mystl::intro_sort(first, last, slg2(last - first) * 2);
+    mystl::final_insertion_sort(first, last);
+  }
+}
+// 重载版本使用函数对象 comp 代替比较操作
+// 分割函数 unchecked_partition
+template <class RandomIter, class T, class Compared>
+RandomIter unchecked_partition(RandomIter first, RandomIter last,
+                               const T &pivot, Compared comp) {
+  while (true) {
+    while (comp(*first, pivot))
+      ++first;
+    --last;
+    while (comp(pivot, *last))
+      --last;
+    if (!(first < last))
+      return first;
+    mystl::iter_swap(first, last);
+    ++first;
+  }
+}
+
+// 内省式排序，先进行 quick sort，当分割行为有恶化倾向时，改用 heap sort
+template <class RandomIter, class Size, class Compared>
+void intro_sort(RandomIter first, RandomIter last, Size depth_limit,
+                Compared comp) {
+  while (static_cast<size_t>(last - first) > kSmallSectionSize) {
+    if (depth_limit == 0) {                         // 到达最大分割深度限制
+      mystl::partial_sort(first, last, last, comp); // 改用 heap_sort
+      return;
+    }
+    --depth_limit;
+    auto mid =
+        mystl::median(*(first), *(first + (last - first) / 2), *(last - 1));
+    auto cut = mystl::unchecked_partition(first, last, mid, comp);
+    mystl::intro_sort(cut, last, depth_limit, comp);
+    last = cut;
+  }
+}
+
+// 插入排序辅助函数 unchecked_linear_insert
+template <class RandomIter, class T, class Compared>
+void unchecked_linear_insert(RandomIter last, const T &value, Compared comp) {
+  auto next = last;
+  --next;
+  while (comp(value, *next)) { // 从尾部开始寻找第一个可插入位置
+    *last = *next;
+    last = next;
+    --next;
+  }
+  *last = value;
+}
+
+// 插入排序函数 unchecked_insertion_sort
+template <class RandomIter, class Compared>
+void unchecked_insertion_sort(RandomIter first, RandomIter last,
+                              Compared comp) {
+  for (auto i = first; i != last; ++i) {
+    mystl::unchecked_linear_insert(i, *i, comp);
+  }
+}
+
+// 插入排序函数 insertion_sort
+template <class RandomIter, class Compared>
+void insertion_sort(RandomIter first, RandomIter last, Compared comp) {
+  if (first == last)
+    return;
+  for (auto i = first + 1; i != last; ++i) {
+    auto value = *i;
+    if (comp(value, *first)) {
+      mystl::copy_backward(first, i, i + 1);
+      *first = value;
+    } else {
+      mystl::unchecked_linear_insert(i, value, comp);
+    }
+  }
+}
+
+// 最终插入排序函数 final_insertion_sort
+template <class RandomIter, class Compared>
+void final_insertion_sort(RandomIter first, RandomIter last, Compared comp) {
+  if (static_cast<size_t>(last - first) > kSmallSectionSize) {
+    mystl::insertion_sort(first, first + kSmallSectionSize, comp);
+    mystl::unchecked_insertion_sort(first + kSmallSectionSize, last, comp);
+  } else {
+    mystl::insertion_sort(first, last, comp);
+  }
+}
+
+template <class RandomIter, class Compared>
+void sort(RandomIter first, RandomIter last, Compared comp) {
+  if (first != last) {
+    // 内省式排序，将区间分为一个个小区间，然后对整体进行插入排序
+    mystl::intro_sort(first, last, slg2(last - first) * 2, comp);
+    mystl::final_insertion_sort(first, last, comp);
+  }
+}
+
 } // namespace mystl
 #endif // !MYTINYSTL_ALGO_H_

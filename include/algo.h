@@ -12,6 +12,7 @@
 #include "heap_algo.h"
 #include "iterator.h"
 #include "memory.h"
+#include "util.h"
 
 namespace mystl {
 /********************************************************************************/
@@ -1754,6 +1755,100 @@ RandomIter partial_sort_copy(InputIter first, InputIter last,
 // 对区间内的元素重排，被一元条件运算判定为 true 的元素会放到区间的前段
 // 该函数不保证元素的原始相对位置
 /*****************************************************************************************/
+template <class BidirectionalIter, class UnaryPredicate>
+BidirectionalIter partition(BidirectionalIter first, BidirectionalIter last,
+                            UnaryPredicate unary_pred) {
+  while (true) {
+    while (first != last && unary_pred(*first)) {
+      ++first;
+    }
+    if (first == last) {
+      break;
+    }
+    --last;
+    while (first != last && !unary_pred(*last)) {
+      --last;
+    }
+    if (first == last) {
+      break;
+    }
+    mystl::iter_swap(first, last);
+    ++first;
+  }
+  return first;
+}
+/*****************************************************************************************/
+// partition_copy
+// 行为与 partition 类似，不同的是，将被一元操作符判定为 true 的放到 result_true
+// 的输出区间 其余放到 result_false 的输出区间，并返回一个 mystl::pair
+// 指向这两个区间的尾部
+/*****************************************************************************************/
+template <class InputIter, class OutputIter1, class OutputIter2,
+          class UnaryPredicate>
+mystl::pair<OutputIter1, OutputIter2>
+partition_copy(InputIter first, InputIter last, OutputIter1 result_true,
+               OutputIter2 result_false, UnaryPredicate unary_pred) {
+  for (; first != last; ++first) {
+    if (unary_pred(*first)) {
+      *result_true++ = *first;
+    } else {
+      *result_false++ = *first;
+    }
+  }
+  return mystl::pair<OutputIter1, OutputIter2>(result_true, result_false);
+}
+/*****************************************************************************************/
+// sort
+// 将[first, last)内的元素以递增的方式排序
+/*****************************************************************************************/
+constexpr static size_t kSmallSectionSize =
+    128; // 小型区间的大小，在这个大小内采用插入排序
+// 用于控制分割恶化的情况
+template <class Size> Size slg2(Size n) {
+  // 找出2^k <= n 的k的最大值
+  Size k = 0;
+  for (; n > 1; n >>= 1) {
+    ++k;
+  }
+  return k;
+}
 
+// 分割函数unchecked_partition
+template <class RandomIter, class T>
+RandomIter unchecked_partition(RandomIter first, RandomIter last,
+                               const T &pivot) {
+  while (true) {
+    while (*first < pivot) {
+      ++first;
+    }
+    --last;
+    while (pivot < *last) {
+      --last;
+    }
+    if (!(first < last)) {
+      return first;
+    }
+    mystl::iter_swap(first, last);
+    ++first;
+  }
+}
+
+// 内省式排序，先进行quick sort，当分割行为有恶化倾向时，改用heap sort
+template <class RandomIter, class Size>
+void intro_sort(RandomIter first, RandomIter last, Size depth_limit) {
+  while (static_cast<size_t>(last - first) > kSmallSectionSize) {
+    if (depth_limit == 0) {
+      // 到达最大分割深度限制
+      mystl::partial_sort(first, last, last); // 改用heap_sort
+      return;
+    }
+    --depth_limit;
+    auto mid =
+        mystl::median(*first, *(first + (last - first) / 2), *(last - 1));
+    auto cut = mystl::unchecked_partition(first, last, mid);
+    mystl::intro_sort(cut, last, depth_limit);
+    last = cut;
+  }
+}
 } // namespace mystl
 #endif // !MYTINYSTL_ALGO_H_

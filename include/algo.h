@@ -2001,5 +2001,150 @@ void sort(RandomIter first, RandomIter last, Compared comp) {
   }
 }
 
+/*****************************************************************************************/
+// nth_element
+// 对序列重排，使得所有小于第 n
+// 个元素的元素出现在它的前面，大于它的出现在它的后面
+/*****************************************************************************************/
+template <class RandomIter>
+void nth_element(RandomIter first, RandomIter nth, RandomIter last) {
+  if (nth == last) {
+    return;
+  }
+  while (last - first > 3) {
+    auto cut = mystl::unchecked_partition(
+        first, last,
+        mystl::median(*first, *(first + (last - first) / 2), *(last - 1)));
+    if (cut <= nth) // 如果nth处于右段
+    {
+      first = cut; // 对右段进行分割
+    } else {
+      last = cut; // 对左段进行分割
+    }
+  }
+  mystl::insertion_sort(first, last);
+}
+
+// 重载版本使用函数对象 comp 代替比较操作
+template <class RandomIter, class Compared>
+void nth_element(RandomIter first, RandomIter nth, RandomIter last,
+                 Compared comp) {
+  if (nth == last)
+    return;
+  while (last - first > 3) {
+    auto cut = mystl::unchecked_partition(
+        first, last,
+        mystl::median(*first, *(first + (last - first) / 2), *(last - 1)),
+        comp);
+    if (cut <= nth) // 如果 nth 位于右段
+      first = cut;  // 对右段进行分割
+    else
+      last = cut; // 对左段进行分割
+  }
+  mystl::insertion_sort(first, last, comp);
+}
+
+/*****************************************************************************************/
+// unique_copy
+// 从[first, last)中将元素复制到 result
+// 上，序列必须有序，如果有重复的元素，只会复制一次
+/*****************************************************************************************/
+// unique_copy_dispatch的forward_iterator_tag版本
+template <class InputIter, class ForwardIter>
+ForwardIter unique_copy_dispatch(InputIter first, InputIter last,
+                                 ForwardIter result,
+                                 mystl::forward_iterator_tag) {
+  *result = *first;
+  while (++first != last) {
+    if (*result != *first) {
+      *++result = *first;
+    }
+  }
+  return ++result;
+}
+// unique_copy_dispatch 的 output_iterator_tag 版本
+// 由于 output iterator 只能进行只读操作，所以不能有 *result != *first
+// 这样的判断
+template <class InputIter, class OutputIter>
+OutputIter unique_copy_dispatch(InputIter first, InputIter last,
+                                OutputIter result, mystl::output_iterator_tag) {
+  auto value = *first;
+  *result = value;
+  while (++first != last) {
+    if (value != *first) {
+      value = *first;
+      *++result = value;
+    }
+  }
+  return ++result;
+}
+
+template <class InputIter, class OutputIter>
+OutputIter unique_copy(InputIter first, InputIter last, OutputIter result) {
+  if (first == last) {
+    return result;
+  }
+  return mystl::unique_copy_dispatch(first, last, result,
+                                     iterator_category(result));
+}
+
+// 重载版本使用函数对象 comp 代替比较操作
+// unique_copy_dispatch 的 forward_iterator_tag 版本
+template <class InputIter, class ForwardIter, class Compared>
+ForwardIter unique_copy_dispatch(InputIter first, InputIter last,
+                                 ForwardIter result, forward_iterator_tag,
+                                 Compared comp) {
+  *result = *first;
+  while (++first != last) {
+    if (!comp(*result, *first))
+      *++result = *first;
+  }
+  return ++result;
+}
+
+// unique_copy_dispatch 的 output_iterator_tag 版本
+// 由于 output iterator 只能进行只读操作，所以不能有 *result != *first
+// 这样的判断
+template <class InputIter, class OutputIter, class Compared>
+OutputIter unique_copy_dispatch(InputIter first, InputIter last,
+                                OutputIter result, output_iterator_tag,
+                                Compared comp) {
+  auto value = *first;
+  *result = value;
+  while (++first != last) {
+    if (!comp(value, *first)) {
+      value = *first;
+      *++result = value;
+    }
+  }
+  return ++result;
+}
+
+template <class InputIter, class OutputIter, class Compared>
+OutputIter unique_copy(InputIter first, InputIter last, OutputIter result,
+                       Compared comp) {
+  if (first == last)
+    return result;
+  return mystl::unique_copy_dispatch(first, last, result,
+                                     iterator_category(result), comp);
+}
+
+/*****************************************************************************************/
+// unique
+// 移除[first, last)内重复的元素，序列必须有序，和 remove
+// 类似，它也不能真正的删除重复元素
+/*****************************************************************************************/
+template <class ForwardIter>
+ForwardIter unique(ForwardIter first, ForwardIter last) {
+  first = mystl::adjacent_find(first, last);
+  return mystl::unique_copy(first, last, first);
+}
+
+// 重载版本使用函数对象 comp 代替比较操作
+template <class ForwardIter, class Compared>
+ForwardIter unique(ForwardIter first, ForwardIter last, Compared comp) {
+  first = mystl::adjacent_find(first, last, comp);
+  return mystl::unique_copy(first, last, first, comp);
+}
 } // namespace mystl
 #endif // !MYTINYSTL_ALGO_H_

@@ -48,6 +48,15 @@ ForwardIter unchecked_uninit_copy(InputIter first, InputIter last,
           typename iterator_traits<ForwardIter>::value_type>{});
 }
 
+template <class InputIter, class ForwardIter>
+ForwardIter uninitialized_copy(InputIter first, InputIter last,
+                               ForwardIter result) {
+  return mystl::unchecked_uninit_copy(
+      first, last, result,
+      std::is_trivially_copy_assignable<
+          typename iterator_traits<ForwardIter>::value_type>{});
+}
+
 /***************************************************************** */
 // uninitialized_copy_n
 // 把[first, first+n)上的内容复制到以result为起始处的空间，返回复制结束的位置

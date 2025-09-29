@@ -222,7 +222,7 @@ public:
 
   template <class... Args> iterator emplace(const_iterator pos, Args &&...args);
 
-  template <class... Args> iterator emplace_back(Args &&...args);
+  template <class... Args> void emplace_back(Args &&...args);
 
   // insert
   iterator insert(const_iterator pos, const value_type &value);
@@ -247,6 +247,15 @@ public:
   iterator erase(const_iterator first, const_iterator last);
   void clear() { erase(begin(), end()); }
 
+  // resize / reserve
+  void resize(size_type new_size) { return resize(new_size, value_type()); }
+  void resize(size_type new_size, const value_type &value);
+
+  void reverse() { mystl::reverse(begin(), end()); }
+
+  // swap
+  void swap(vector &rhs) noexcept;
+
 private:
   // helper functions
 
@@ -261,6 +270,9 @@ private:
 
   void destroy_and_recover(iterator first, iterator last, size_type n);
 
+  // calculate the growth size
+  size_type get_new_cap(size_type add_size);
+
   // assign
   void fill_assign(size_type n, const value_type &value);
 
@@ -269,6 +281,17 @@ private:
 
   template <class FIter>
   void copy_assign(FIter first, FIter last, forward_iterator_tag);
+
+  // reallocate
+  template <class... Args>
+  void reallocate_emplace(iterator pos, Args &&...args);
+  void reallocate_insert(iterator pos, const value_type &value);
+
+  // insert
+
+  iterator fill_insert(iterator pos, size_type n, const value_type &value);
+  template <class IIter>
+  void copy_insert(iterator pos, IIter first, IIter last);
 };
 /**********************************************************************/
 
@@ -313,7 +336,32 @@ typename vector<T>::iterator vector<T>::emplace(const_iterator pos,
   iterator xpos = const_cast<iterator>(pos);
   const size_type n = xpos - begin_;
   if (end_ != cap_ && xpos == end_) {
-    // Todo
+    data_allocator::construct(mystl::address_of(*end_),
+                              mystl::forward<Args>(args)...);
+    ++end_;
+  } else if (end_ != cap_) {
+    auto new_end = end_;
+    data_allocator::construct(mystl::address_of(*end_), *(end_ - 1));
+    ++new_end;
+    mystl::copy_backward(xpos, end_ - 1, end_);
+    *xpos = value_type(mystl::forward<Args>(args)...);
+    end_ = new_end;
+  } else {
+    reallocate_emplace(xpos, mystl::forward<Args>(args)...);
+  }
+  return begin() + n;
+}
+
+// 在尾部就地构造元素，避免额外的复制或移动开销
+template <class T>
+template <class... Args>
+void vector<T>::emplace_back(Args &&...args) {
+  if (end_ < cap_) {
+    data_allocator::construct(mystl::address_of(*end_),
+                              mystl::forward<Args>(args)...);
+    ++end_;
+  } else {
+    reallocate_emplace(end_, mystl::forward<Args>(args)...);
   }
 }
 
@@ -338,6 +386,25 @@ typename vector<T>::iterator vector<T>::erase(const_iterator first,
   data_allocator::destroy(mystl::move(r + (last - first), end_, r), end_);
   end_ = end_ - (last - first);
   return begin_ + n;
+}
+
+// 重置容器大小
+template <class T>
+void vector<T>::resize(size_type new_size, const value_type &value) {
+  if (new_size < size()) {
+    erase(begin() + new_size, end());
+  } else {
+    insert(end(), new_size - size(), value);
+  }
+}
+
+// 与另一个vector交换
+template <class T> void vector<T>::swap(vector<T> &rhs) noexcept {
+  if (this != &rhs) {
+    mystl::swap(begin_, rhs.begin_);
+    mystl::swap(end_, rhs.end_);
+    mystl::swap(cap_, rhs.cap_);
+  }
 }
 
 /**********************************************************************/
@@ -396,6 +463,22 @@ void vector<T>::destroy_and_recover(iterator first, iterator last,
   data_allocator::deallocate(first, n);
 }
 
+// get_new_cap函数
+template <class T>
+typename vector<T>::size_type vector<T>::get_new_cap(size_type add_size) {
+  const auto old_size = capacity();
+  THROW_LENGTH_ERROR_IF(old_size > max_size() - add_size,
+                        "vector<T>'s size too big");
+  if (old_size > max_size() - old_size / 2) {
+    return old_size + add_size > max_size() - 16 ? old_size + add_size
+                                                 : old_size + add_size + 16;
+  }
+  const size_type new_size =
+      old_size == 0 ? mystl::max(add_size, static_cast<size_type>(16))
+                    : mystl::max(old_size + old_size / 2, old_size + add_size);
+  return new_size;
+}
+
 // fill_assign函数
 template <class T>
 void vector<T>::fill_assign(size_type n, const value_type &value) {
@@ -420,12 +503,123 @@ void vector<T>::copy_assign(IIter first, IIter last, input_iterator_tag) {
   {
     *cur = *first;
   }
-  if (first = last) {
+  if (first == last) {
     erase(cur, end_);
   } else {
     insert(end_, first, last);
   }
 }
+
+// 用[first,last)为容器赋值
+template <class T>
+template <class FIter>
+void vector<T>::copy_assign(FIter first, FIter last, forward_iterator_tag) {
+  const size_type len = mystl::distance(first, last);
+  if (len > capacity()) {
+    vector tmp(first, last);
+    swap(tmp);
+  } else if (size() >= len) {
+    auto new_end = mystl::copy(first, last, begin_);
+    data_allocator::destroy(new_end, end_);
+    end_ = new_end;
+  } else {
+    auto mid = first;
+    mystl::distance(mid, size());
+    mystl::copy(first, mid, begin_);
+    auto new_end = mystl::uninitialized_copy(mid, last, end_);
+    end_ = new_end;
+  }
+}
+
+// 重新分配空间并在pos处就地构造元素
+template <class T>
+template <class... Args>
+void vector<T>::reallocate_emplace(iterator pos, Args &&...args) {
+  const auto new_size = get_new_cap(1);
+  auto new_begin = data_allocator::allocate(new_size);
+  auto new_end = new_begin;
+  try {
+    new_end = mystl::uninitialized_copy(begin_, pos, new_begin);
+    data_allocator::construct(mystl::address_of(*new_end),
+                              mystl::forward<Args>(args)...);
+    ++new_end;
+    new_end = mystl::uninitialized_move(pos, end_, new_end);
+  } catch (...) {
+    data_allocator::deallocate(new_begin, new_size);
+    throw;
+  }
+  destroy_and_recover(begin_, end_, cap_ - begin_);
+  begin_ = new_begin;
+  end_ = new_end;
+  cap_ = new_begin + new_size;
+}
+
+// 重新分配空间并在pos处插入元素
+template <class T>
+void vector<T>::reallocate_insert(iterator pos, const value_type &value) {
+  const auto new_size = get_new_cap(1);
+  auto new_begin = data_allocator::allocate(new_size);
+  auto new_end = new_begin;
+  const value_type value_copy = value;
+  try {
+    new_end = mystl::uninitialized_move(begin_, pos, new_begin);
+    data_allocator::construct(mystl::address_of(*new_end), value_copy);
+    ++new_end;
+    new_end = mystl::uninitialized_move(pos, end_, new_end);
+  } catch (...) {
+    data_allocator::deallocate(new_begin, new_size);
+    throw;
+  }
+  destroy_and_recover(begin_, end_, cap_ - begin_);
+  begin_ = new_begin;
+  end_ = new_end;
+  cap_ = new_begin + new_size;
+}
+
+// fill_insert函数
+template <class T>
+typename vector<T>::iterator vector<T>::fill_insert(iterator pos, size_type n,
+                                                    const value_type &value) {
+  if (n == 0) {
+    return pos;
+  }
+  const size_type xpos = pos - begin_;
+  const value_type value_copy = value; // 避免被覆盖
+  if (static_cast<size_type>(cap_ - end_) >= n) {
+    // 如果备用空间大于等于要增加的空间
+    const size_type after_elems = end_ - pos;
+    auto old_end = end_;
+    if (after_elems > n) {
+      mystl::uninitialized_copy(end_ - n, end_, end_);
+      end_ += n;
+      mystl::move_backward(pos, old_end - n, old_end);
+      mystl::uninitialized_fill_n(pos, after_elems, value_copy);
+    } else {
+      end_ = mystl::uninitialized_fill_n(end_, n - after_elems, value_copy);
+      end_ = mystl::uninitialized_move(pos, old_end, end_);
+      mystl::uninitialized_fill_n(pos, after_elems, value_copy);
+    }
+  } else {
+    // 如果备用空间不足
+    const auto new_size = get_new_cap(n);
+    auto new_begin = data_allocator::allocate(new_size);
+    auto new_end = new_begin;
+    try {
+      new_end = mystl::uninitialized_move(begin_, pos, new_begin);
+      new_end = mystl::uninitialized_fill_n(new_end, n, value);
+      new_end = mystl::uninitialized_move(pos, end_, new_end);
+    } catch (...) {
+      destroy_and_recover(new_begin, new_end, new_size);
+      throw;
+    }
+    data_allocator::deallocate(begin_, cap_ - begin_);
+    begin_ = new_begin;
+    end_ = new_end;
+    cap_ = begin_ + new_size;
+  }
+  return begin_ + xpos;
+}
+
 } // namespace mystl
 
 #endif //! MYTINYSTL_VECTOR_H

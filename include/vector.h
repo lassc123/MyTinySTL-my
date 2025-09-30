@@ -682,6 +682,53 @@ void vector<T>::copy_insert(iterator pos, IIter first, IIter last) {
     cap_ = begin_ + new_size;
   }
 }
+
+// reinsert函数
+template <class T> void vector<T>::reinsert(size_type size) {
+  auto new_begin = data_allocator::allocate(size);
+  try {
+    mystl::uninitialized_move(begin_, end_, new_begin);
+  } catch (...) {
+    data_allocator::deallocate(new_begin, size);
+    throw;
+  }
+  data_allocator::deallocate(begin_, cap_ - begin_);
+  begin_ = new_begin;
+  end_ = begin_ + size;
+  cap_ = begin_ + size;
+}
+
+/*****************************************************************************************/
+// 重载比较操作符
+
+template <class T> bool operator==(const vector<T> &lhs, const vector<T> &rhs) {
+  return lhs.size() == rhs.size() &&
+         mystl::equal(lhs.begin(), lhs.end(), rhs.begin());
+}
+
+template <class T> bool operator!=(const vector<T> &lhs, const vector<T> &rhs) {
+  return !(lhs == rhs);
+}
+
+template <class T> bool operator<(const vector<T> &lhs, const vector<T> &rhs) {
+  return mystl::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(),
+                                        rhs.end());
+}
+
+template <class T> bool operator>(const vector<T> &lhs, const vector<T> &rhs) {
+  return rhs < lhs;
+}
+
+template <class T> bool operator<=(const vector<T> &lhs, const vector<T> &rhs) {
+  return !(rhs < lhs);
+}
+
+template <class T> bool operator>=(const vector<T> &lhs, const vector<T> &rhs) {
+  return !(lhs < rhs);
+}
+
+// 重载mystl的swap
+template <class T> void swap(vector<T> &lhs, vector<T> &rhs) { lhs.swap(rhs); }
 } // namespace mystl
 
 #endif //! MYTINYSTL_VECTOR_H

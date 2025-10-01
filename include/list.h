@@ -224,6 +224,34 @@ public:
     rhs.size_ = 0;
   }
 
+  list &operator=(const list &rhs) {
+    if (this != &rhs) {
+      assign(rhs.begin(), rhs.end());
+    }
+    return *this;
+  }
+
+  list &operator=(list &&rhs) {
+    clear();
+    splice(end(), rhs);
+    return *this;
+  }
+
+  list &operator=(std::initializer_list<T> ilist) {
+    list tmp(ilist.begin(), ilist.end());
+    swap(tmp);
+    return *this;
+  }
+
+  ~list() {
+    if (node_) {
+      clear();
+      base_allocator::deallocate(node_);
+      node_ = nullptr;
+      size_ = 0;
+    }
+  }
+
 public:
   // 迭代器相关操作
   iterator begin() noexcept { return node_->next; }
@@ -325,6 +353,15 @@ public:
 
   void clear();
 
+  // resize
+  void resize(size_type new_size) { resize(new_size, value_type()); }
+  void resize(size_type new_size, const value_type &value);
+
+  void swap(list &rhs) {
+    mystl::swap(node_, rhs.node_);
+    mystl::swap(size_, rhs.size_);
+  }
+
 private:
   // helper functions
 
@@ -352,6 +389,10 @@ private:
                        const value_type &value);
   template <class Iter>
   iterator copy_insert(const_iterator pos, size_type n, Iter first);
+
+  // sort
+  template <class Compared>
+  iterator list_sort(iterator first, iterator last, size_type n, Compared comp);
 };
 /*****************************************************************************************/
 
@@ -394,6 +435,12 @@ template <class T> void list<T>::clear() {
     node_->unlink();
     size_ = 0;
   }
+}
+
+// 重置容器大小
+template <class T>
+void list<T>::resize(size_type new_size, const value_type &value) {
+  // todo
 }
 /*****************************************************************************************/
 // helper function
@@ -610,5 +657,79 @@ typename list<T>::iterator list<T>::copy_insert(const_iterator pos, size_type n,
   }
   return r;
 }
+
+// 对list进行归并排序,并返回一个迭代器指向区间最小元素的位置
+template <class T>
+template <class Compared>
+typename list<T>::iterator list<T>::list_sort(iterator first1, iterator last2,
+                                              size_type n, Compared comp) {
+  if (n < 2) {
+    return first1;
+  }
+  if (n == 2) {
+    if (comp(*--last2, *first1)) {
+      auto ln = last2.node_;
+      unlink_nodes(ln, ln);
+      link_nodes(first1.node_, ln, ln);
+      return last2;
+    }
+    return first1;
+  }
+
+  auto n2 = n / 2;
+  auto last1 = first1;
+  mystl::advance(last1, n2);
+  auto result = first1 = list_sort(first1, last1, n2, comp); // 前半段的最小位置
+  auto first2 = last1 =
+      list_sort(last1, last2, n - n2, comp); // 后半段的最小位置
+
+  // 把较小的一段区间移到前面
+  if (comp(*first2, *first1)) {
+    auto m = first2;
+    ++m;
+    for (; m != last2 && comp(*m, *first1); ++m) {
+      ;
+    }
+    auto f = first2.node_;
+    auto l = m.node_->prev;
+    result = first2;
+    last1 = first2 = m;
+    unlink_nodes(f, l);
+    m = first1;
+    ++m;
+    link_nodes(first1.node_, f, l);
+    first1 = m;
+  } else {
+    ++first1;
+  }
+
+  // 合并两段有序区间
+  while (first1 != last1 && first2 != last2) {
+    if (comp(*first2, *first1)) {
+      auto m = first2;
+      ++m;
+      for (; m != last2 && comp(*m, *first1); ++m) {
+        ;
+      }
+      auto f = first2.node_;
+      auto l = m.node_->prev;
+      if (last1 == first2) {
+        last1 = m;
+      }
+      first2 = m;
+      unlink_nodes(f, l);
+      m = first1;
+      ++m;
+      link_nodes(first1.node_, f, l);
+      first1 = m;
+    } else {
+      ++first1;
+    }
+  }
+  return result;
+}
+
+// 重载mystl的swap
+template <class T> void swap(list<T> &lhs, list<T> &rhs) { lhs.swap(rhs); }
 } // namespace mystl
 #endif // !MYTINYSTL_LIST_H

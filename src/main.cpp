@@ -5,9 +5,11 @@
 #include "../include/functional.h"
 #include "../include/heap_algo.h"
 #include "../include/iterator.h"
+#include "../include/list.h"
 #include "../include/type_traits.h"
 #include "../include/uninitialized.h"
 #include "../include/util.h"
+#include "../include/vector.h"
 
 // #include "util.h"
 #include <iostream>

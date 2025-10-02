@@ -317,6 +317,31 @@ public:
     copy_assign(ilist.begin(), ilist.end());
   }
 
+  // emplace_front / emplace_back / emplace
+
+  template <class... Args> void emplace_front(Args &&...args) {
+    THROW_LENGTH_ERROR_IF(size_ > max_size() - 1, "list<T>'s size too big");
+    auto link_node = create_node(mystl::forward<Args>(args)...);
+    link_nodes_at_front(link_node->as_base(), link_node->as_base());
+    ++size_;
+  }
+
+  template <class... Args> void emplace_back(Args &&...args) {
+    THROW_LENGTH_ERROR_IF(size_ > max_size() - 1, "list<T>'s size too big");
+    auto link_node = create_node(mystl::forward<Args>(args)...);
+    link_nodes_at_back(link_node->as_base(), link_node->as_base());
+    ++size_;
+  }
+
+  template <class... Args>
+  iterator emplace(const_iterator pos, Args &&...args) {
+    THROW_LENGTH_ERROR_IF(size_ > max_size() - 1, "list<T>'s size too big");
+    auto link_node = create_node(mystl::forward<Args>(args)...);
+    link_nodes(pos.node_, link_node->as_base(), link_node->as_base());
+    ++size_;
+    return iterator(link_node);
+  }
+
   // insert
 
   iterator insert(const_iterator pos, const value_type &value) {
@@ -347,6 +372,44 @@ public:
     return copy_insert(pos, n, first);
   }
 
+  // push_front / push_back
+
+  void push_front(const value_type &value) {
+    THROW_LENGTH_ERROR_IF(size_ > max_size() - 1, "list<T>'s size too big");
+    auto link_node = create_node(value);
+    link_nodes_at_front(link_node->as_base(), link_node->as_base());
+    ++size_;
+  }
+
+  void push_front(value_type &&value) { emplace_front(mystl::move(value)); }
+
+  void push_back(const value_type &value) {
+    THROW_LENGTH_ERROR_IF(size_ > max_size() - 1, "list<T>'s size too big");
+    auto link_node = create_node(value);
+    link_nodes_at_back(link_node->as_base(), link_node->as_base());
+    ++size_;
+  }
+
+  void push_back(value_type &&value) { emplace_back(mystl::move(value)); }
+
+  // pop_front / pop_back
+
+  void pop_front() {
+    MYSTL_DEBUG(!empty());
+    auto n = node_->next;
+    unlink_nodes(n, n);
+    destroy_node(n->as_node());
+    --size_;
+  }
+
+  void pop_back() {
+    MYSTL_DEBUG(!empty());
+    auto n = node_->prev;
+    unlink_nodes(n, n);
+    destroy_node(n->as_node());
+    --size_;
+  }
+
   // erase / clear
   iterator erase(const_iterator pos);
   iterator erase(const_iterator first, const_iterator last);
@@ -361,6 +424,31 @@ public:
     mystl::swap(node_, rhs.node_);
     mystl::swap(size_, rhs.size_);
   }
+
+  // list 相关操作
+
+  void splice(const_iterator pos, list &other);
+  void splice(const_iterator pos, list &other, const_iterator it);
+  void splice(const_iterator pos, list &other, const_iterator first,
+              const_iterator last);
+
+  void remove(const value_type &value) {
+    remove_if([&](const value_type &v) { return v == value; });
+  }
+  template <class UnaryPredicate> void remove_if(UnaryPredicate pred);
+
+  void unique() { unique(mystl::equal_to<T>()); }
+  template <class BinaryPredicate> void unique(BinaryPredicate pred);
+
+  void merge(list &x) { merge(x, mystl::less<T>()); }
+  template <class Compared> void merge(list &x, Compared comp);
+
+  void sort() { list_sort(begin(), end(), size(), mystl::less<T>()); }
+  template <class Compared> void sort(Compared comp) {
+    list_sort(begin(), end(), size(), comp);
+  }
+
+  void reverse();
 
 private:
   // helper functions
@@ -440,7 +528,160 @@ template <class T> void list<T>::clear() {
 // 重置容器大小
 template <class T>
 void list<T>::resize(size_type new_size, const value_type &value) {
-  // todo
+  auto i = begin();
+  size_type len = 0;
+  while (i != end() && len < new_size) {
+    ++i;
+    ++len;
+  }
+  if (len == new_size) {
+    erase(i, node_);
+  } else {
+    insert(node_, new_size - len, value);
+  }
+}
+
+// 将 list x 接合于pos之前
+template <class T> void list<T>::splice(const_iterator pos, list &x) {
+  MYSTL_DEBUG(this != &x);
+  if (!x.empty()) {
+    THROW_LENGTH_ERROR_IF(size_ > max_size() - x.size_,
+                          "list<T>'s size too big");
+
+    auto f = x.node_->next;
+    auto l = x.node_->prev;
+
+    x.unlink_nodes(f, l);
+    link_nodes(pos.node_, f, l);
+
+    size_ += x.size_;
+    x.size_ = 0;
+  }
+}
+
+// 将 it 所指的节点结合于pos之前
+template <class T>
+void list<T>::splice(const_iterator pos, list &x, const_iterator it) {
+  if (pos.node_ != it.node_ && pos.node_ != it.node_->next) {
+    THROW_LENGTH_ERROR_IF(size_ > max_size() - 1, "list<T>'s size too big");
+
+    auto f = it.node_;
+    x.unlink_nodes(f, f);
+    link_nodes(pos.node_, f, f);
+
+    ++size_;
+    --size_;
+  }
+}
+
+// 将list x 的[first,last)内的节点结合于pos之前
+template <class T>
+void list<T>::splice(const_iterator pos, list &x, const_iterator first,
+                     const_iterator last) {
+  if (first != last && this != &x) {
+    size_type n = mystl::distance(first, last);
+    THROW_LENGTH_ERROR_IF(size_ > max_size() - n, "list<T>'s size too big");
+    auto f = first.node_;
+    auto l = last.node_->prev;
+
+    x.unlink_nodes(f, l);
+    link_nodes(pos.node_, f, l);
+
+    size_ += n;
+    x.size_ -= n;
+  }
+}
+
+// 将令一元操作pred为true的所有元素移除
+template <class T>
+template <class UnaryPredicate>
+void list<T>::remove_if(UnaryPredicate pred) {
+  auto f = begin();
+  auto l = end();
+  for (auto next = f; f != l; f = next) {
+    ++next;
+    if (pred(*f)) {
+      erase(f);
+    }
+  }
+}
+
+// 移除list中满足pred为true的重复元素
+template <class T>
+template <class BinaryPredicate>
+void list<T>::unique(BinaryPredicate pred) {
+  auto i = begin();
+  auto e = end();
+  auto j = i;
+  ++j;
+  while (j != e) {
+    if (pred(*i, *j)) {
+      erase(j);
+    } else {
+      i = j;
+    }
+    j = i;
+    ++j;
+  }
+}
+
+// 与另一个 list 合并,按照comp为true的顺序
+template <class T>
+template <class Compared>
+void list<T>::merge(list &x, Compared comp) {
+  if (this != &x) {
+    THROW_LENGTH_ERROR_IF(size_ > max_size() - x.size_,
+                          "list<T>'s size too big");
+
+    auto first1 = begin();
+    auto last1 = end();
+    auto first2 = x.begin();
+    auto last2 = x.end();
+
+    while (first1 != last1 && first2 != last2) {
+      if (comp(*first2, *first1)) {
+        // 使comp为true的一段区间
+        auto next = first2;
+        ++next;
+        for (; next != last2 && comp(*next, *first1); ++next) {
+          ;
+        }
+        auto first = first2.node_;
+        auto last = next.node_->prev;
+        first2 = next;
+
+        // link node
+        x.unlink_nodes(first, last);
+        link_nodes(first1.node_, first, last);
+        ++first1;
+      } else {
+        ++first1;
+      }
+    }
+    // 连接剩余部分
+    if (first2 != last2) {
+      auto first = first2.node_;
+      auto last = last2.node_->prev;
+      x.unlink_nodes(first, last);
+      link_nodes(last1.node_, first, last);
+    }
+    size_ += x.size_;
+    x.size_ = 0;
+  }
+}
+
+// 将list反转
+template <class T> void list<T>::reverse() {
+  if (size_ <= 1) {
+    return;
+  }
+  auto i = begin();
+  auto e = end();
+  while (i.node_ != e.node_) {
+    mystl::swap(i.node_->prev, i.node_->next);
+    i.node_ = i.node_->prev;
+  }
+  mystl::swap(e.node_->prev, e.node_->next);
 }
 /*****************************************************************************************/
 // helper function
@@ -727,6 +968,40 @@ typename list<T>::iterator list<T>::list_sort(iterator first1, iterator last2,
     }
   }
   return result;
+}
+
+// 重载比较操作符
+template <class T> bool operator==(const list<T> &lhs, const list<T> &rhs) {
+  auto first1 = lhs.begin();
+  auto last1 = lhs.end();
+  auto first2 = rhs.begin();
+  auto last2 = rhs.end();
+  for (; first1 != last1 && first2 != last2 && *first1 == *first2;
+       ++first1, ++first2) {
+    ;
+  }
+  return first1 == last1 && first2 == last2;
+}
+
+template <class T> bool operator<(const list<T> &lhs, const list<T> &rhs) {
+  return mystl::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(),
+                                        rhs.end());
+}
+
+template <class T> bool operator!=(const list<T> &lhs, const list<T> &rhs) {
+  return !(lhs == rhs);
+}
+
+template <class T> bool operator>(const list<T> &lhs, const list<T> &rhs) {
+  return rhs < lhs;
+}
+
+template <class T> bool operator<=(const list<T> &lhs, const list<T> &rhs) {
+  return !(rhs < lhs);
+}
+
+template <class T> bool operator>=(const list<T> &lhs, const list<T> &rhs) {
+  return !(lhs < rhs);
 }
 
 // 重载mystl的swap

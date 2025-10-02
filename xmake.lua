@@ -5,7 +5,7 @@ target("MyTinySTL")
     set_kind("binary")
     add_files("src/*.cpp")
     add_headerfiles("include/*.h")
-    set_languages("c++17")
+    set_languages("c++23")
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io

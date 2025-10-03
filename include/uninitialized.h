@@ -119,7 +119,7 @@ void unchecked_uninit_fill(ForwardIter first, ForwardIter last, const T &value,
 }
 
 template <class ForwardIter, class T>
-void uninitialize_fill(ForwardIter first, ForwardIter last, const T &value) {
+void uninitialized_fill(ForwardIter first, ForwardIter last, const T &value) {
   mystl::unchecked_uninit_fill(
       first, last, value,
       std::is_trivially_copy_assignable<

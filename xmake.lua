@@ -1,11 +1,13 @@
 add_rules("mode.debug", "mode.release")
 add_rules("plugin.compile_commands.autoupdate", {outputdir = ".vscode"})
+add_requires("mimalloc")
 
 target("MyTinySTL")
     set_kind("binary")
     add_files("src/*.cpp")
     add_headerfiles("include/*.h")
     set_languages("c++23")
+    add_packages("mimalloc")
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
@@ -75,4 +77,3 @@ target("MyTinySTL")
 --
 -- @endcode
 --
-

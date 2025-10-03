@@ -2,6 +2,7 @@
 #define MYTINYSTL_ALLOCATOR_H_
 
 #include "construct.h"
+#include <mimalloc.h>
 
 namespace mystl {
 template <class T> class allocator {

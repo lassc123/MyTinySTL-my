@@ -11,9 +11,9 @@
 #include "../include/util.h"
 #include "../include/vector.h"
 
-// #include "util.h"
 #include <iostream>
 int main(int argc, char **argv) {
+
   //   mystl::pair<int, double> p1(1, 2.0);
   auto pair1 = mystl::make_pair(10, 3.14);
   std::cout << "pair1.first: " << pair1.first << std::endl;

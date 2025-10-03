@@ -1,27 +1,23 @@
-#ifndef MYTINYSTL_DEQUE_H
-#define MYTINYSTL_DEQUE_H
+#ifndef MYTINYSTL_DEQUE_H_
+#define MYTINYSTL_DEQUE_H_
 
 // 这个头文件包含了一个模板类 deque
 // deque: 双端队列
 
 // notes:
 //
-// 异常保证:
+// 异常保证：
 // mystl::deque<T>
-// 满足基本的异常保证，部分函数无异常保证，并对以下等函数做强异常保证:
-// * emplace_front
-// * emplace_back
-// * emplace
-// * push_front
-// * push_back
-// * insert
+// 满足基本异常保证，部分函数无异常保证，并对以下等函数做强异常安全保证：
+//   * emplace_front
+//   * emplace_back
+//   * emplace
+//   * push_front
+//   * push_back
+//   * insert
 
-#include <cstddef>
 #include <initializer_list>
 
-#include "algobase.h"
-#include "allocator.h"
-#include "construct.h"
 #include "exceptdef.h"
 #include "iterator.h"
 #include "memory.h"
@@ -68,10 +64,10 @@ struct deque_iterator : public iterator<random_access_iterator_tag, T> {
   // 迭代器所含成员数据
   value_pointer cur;   // 指向所在缓冲区的当前元素
   value_pointer first; // 指向所在缓冲区的头部
-  value_pointer last;  // 指向所在缓存区的尾部
+  value_pointer last;  // 指向所在缓冲区的尾部 (one-past-the-end)
   map_pointer node;    // 缓冲区所在节点
 
-  // 构造，复制，析构函数
+  // 构造、复制、移动函数
   deque_iterator() noexcept
       : cur(nullptr), first(nullptr), last(nullptr), node(nullptr) {}
 
@@ -80,7 +76,6 @@ struct deque_iterator : public iterator<random_access_iterator_tag, T> {
 
   deque_iterator(const iterator &rhs)
       : cur(rhs.cur), first(rhs.first), last(rhs.last), node(rhs.node) {}
-
   deque_iterator(iterator &&rhs) noexcept
       : cur(rhs.cur), first(rhs.first), last(rhs.last), node(rhs.node) {
     rhs.cur = nullptr;
@@ -106,7 +101,7 @@ struct deque_iterator : public iterator<random_access_iterator_tag, T> {
   void set_node(map_pointer new_node) {
     node = new_node;
     first = *new_node;
-    last = *new_node + buffer_size;
+    last = first + buffer_size;
   }
 
   // 重载运算符
@@ -120,8 +115,7 @@ struct deque_iterator : public iterator<random_access_iterator_tag, T> {
 
   self &operator++() {
     ++cur;
-    if (cur == last) {
-      // 如果到达缓冲区的尾
+    if (cur == last) { // 如果到达缓冲区的尾
       set_node(node + 1);
       cur = first;
     }
@@ -134,8 +128,7 @@ struct deque_iterator : public iterator<random_access_iterator_tag, T> {
   }
 
   self &operator--() {
-    if (cur == first) {
-      // 如果到达缓冲区的头
+    if (cur == first) { // 如果到达缓冲区的头
       set_node(node - 1);
       cur = last;
     }
@@ -150,11 +143,10 @@ struct deque_iterator : public iterator<random_access_iterator_tag, T> {
 
   self &operator+=(difference_type n) {
     const auto offset = n + (cur - first);
-    if (offset >= 0 && offset < static_cast<difference_type>(buffer_size)) {
-      // 仍在当前缓冲区
+    if (offset >= 0 &&
+        offset < static_cast<difference_type>(buffer_size)) { // 仍在当前缓冲区
       cur += n;
-    } else {
-      // 要跳到其他缓冲区
+    } else { // 要跳到其他的缓冲区
       const auto node_offset =
           offset > 0
               ? offset / static_cast<difference_type>(buffer_size)
@@ -165,7 +157,6 @@ struct deque_iterator : public iterator<random_access_iterator_tag, T> {
     }
     return *this;
   }
-
   self operator+(difference_type n) const {
     self tmp = *this;
     return tmp += n;
@@ -177,6 +168,7 @@ struct deque_iterator : public iterator<random_access_iterator_tag, T> {
   }
 
   reference operator[](difference_type n) const { return *(*this + n); }
+
   // 重载比较操作符
   bool operator==(const self &rhs) const { return cur == rhs.cur; }
   bool operator<(const self &rhs) const {
@@ -217,15 +209,15 @@ public:
   static const size_type buffer_size = deque_buf_size<T>::value;
 
 private:
-  // 用以下四个数据来表示一个 deque
-  iterator begin_; // 指向第一个节点
-  iterator end_;   // 指向最后一个节点
+  // 用以下四个数据来表现一个 deque
+  iterator begin_; // 指向第一个元素
+  iterator end_;   // 指向最后一个元素的下一个位置
   map_pointer
-      map_; // 指向一块map，map中的每一个元素都是一个指针，指向一个缓冲区
-  size_type map_size_; // map 内指针的数目
+      map_; // 指向一块 map，map 中的每个元素都是一个指针，指向一个缓冲区
+  size_type map_size_; // map 的大小
 
 public:
-  // 构造，复制，移动，析构函数
+  // 构造、复制、移动、析构函数
 
   deque() { fill_init(0, value_type()); }
 
@@ -245,19 +237,18 @@ public:
   }
 
   deque(const deque &rhs) {
-    copy_init(rhs.begin(), rhs.end(), mystl::forward_iterator_tag);
+    copy_init(rhs.begin(), rhs.end(), mystl::forward_iterator_tag());
   }
+
   deque(deque &&rhs) noexcept
       : begin_(mystl::move(rhs.begin_)), end_(mystl::move(rhs.end_)),
-        map_(mystl::move(rhs.map_)), map_size_(rhs.map_size_) {
-    rhs.begin_ = iterator();
-    rhs.end_ = iterator();
+        map_(rhs.map_), map_size_(rhs.map_size_) {
     rhs.map_ = nullptr;
     rhs.map_size_ = 0;
   }
 
   deque &operator=(const deque &rhs);
-  deque &operator=(deque &&rhs);
+  deque &operator=(deque &&rhs) noexcept;
 
   deque &operator=(std::initializer_list<value_type> ilist) {
     deque tmp(ilist);
@@ -267,11 +258,8 @@ public:
 
   ~deque() {
     if (map_ != nullptr) {
-      clear();
-      data_allocator::deallocate(*begin_.node, buffer_size);
-      *begin_.node = nullptr;
+      destroy_elements_and_buffers();
       map_allocator::deallocate(map_, map_size_);
-      map_ = nullptr;
     }
   }
 
@@ -288,67 +276,6 @@ public:
   void swap(deque &rhs) noexcept;
 };
 /************************************************************/
-
-// 移动赋值运算符号
-template <class T> deque<T> &deque<T>::operator=(deque &&rhs) {
-  if (this != &rhs) {
-    deque(mystl::move(rhs)).swap(*this);
-  }
-  return *this;
-}
-
-// 删除[first,last)上的元素
-template <class T>
-typename deque<T>::iterator deque<T>::erase(iterator first, iterator last) {
-  if (first == begin_ && last == end_) {
-    clear();
-    return end_;
-  } else {
-    const size_type len = last - first;
-    const size_type elems_before = first - begin_;
-    const size_type elems_after = size() - len - elems_before;
-
-    if (elems_before < elems_after) {
-      // 前面的元素比较少，向前移动
-      mystl::copy_backward(begin_, first, last);
-      auto new_begin = begin_ + len;
-      mystl::destroy(begin_, new_begin);
-      for (map_pointer node = begin_.node; node < new_begin.node; ++node) {
-        data_allocator::deallocate(*node, buffer_size);
-      }
-      begin_ = new_begin;
-    } else {
-      // 后面的元素比较少
-      mystl::copy(last, end_, first);
-      auto new_end = end_ - len;
-
-      mystl::destroy(new_end, end_);
-      for (map_pointer node = new_end.node + 1; node <= end_.node; ++node) {
-        data_allocator::deallocate(*node, buffer_size);
-      }
-      end_ = new_end;
-    }
-    return begin_ + elems_before;
-  }
-}
-
-// 清空 deque
-template <class T> void deque<T>::clear() {
-  // clear 会保留头部的缓冲区
-  for (map_pointer cur = begin_.node + 1; cur < end_.node; ++cur) {
-    data_allocator::destroy(*cur, *cur + buffer_size);
-    data_allocator::deallocate(*cur, buffer_size);
-  }
-  if (begin_.node != end_.node) { // 有两个以上的缓冲区
-    mystl::destroy(begin_.cur, begin_.last);
-    mystl::destroy(end_.first, end_.cur);
-    data_allocator::deallocate(*end_.node, buffer_size);
-  } else {
-    mystl::destroy(begin_.cur, end_.cur);
-  }
-  shrink_to_fit();
-  end_ = begin_;
-}
 
 // 交换两个swap
 template <class T> void deque<T>::swap(deque &rhs) noexcept {

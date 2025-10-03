@@ -1,5 +1,5 @@
-#ifndef MYTINYSTL_DUQUE_H
-#define MYTINYSTL_DUQUE_H
+#ifndef MYTINYSTL_DEQUE_H
+#define MYTINYSTL_DEQUE_H
 
 // 这个头文件包含了一个模板类 deque
 // deque: 双端队列
@@ -19,7 +19,9 @@
 #include <cstddef>
 #include <initializer_list>
 
+#include "algobase.h"
 #include "allocator.h"
+#include "construct.h"
 #include "exceptdef.h"
 #include "iterator.h"
 #include "memory.h"
@@ -178,7 +180,7 @@ struct deque_iterator : public iterator<random_access_iterator_tag, T> {
   // 重载比较操作符
   bool operator==(const self &rhs) const { return cur == rhs.cur; }
   bool operator<(const self &rhs) const {
-    return node == rhs.node ? (cur < rhs.rhs) : (node < rhs.node);
+    return node == rhs.node ? (cur < rhs.cur) : (node < rhs.node);
   }
   bool operator!=(const self &rhs) const { return !(*this == rhs); }
   bool operator>(const self &rhs) const { return rhs < *this; }
@@ -222,8 +224,141 @@ private:
       map_; // 指向一块map，map中的每一个元素都是一个指针，指向一个缓冲区
   size_type map_size_; // map 内指针的数目
 
-  // todo
+public:
+  // 构造，复制，移动，析构函数
+
+  deque() { fill_init(0, value_type()); }
+
+  explicit deque(size_type n) { fill_init(n, value_type()); }
+
+  deque(size_type n, const value_type &value) { fill_init(n, value); }
+
+  template <class IIter,
+            typename std::enable_if<mystl::is_input_iterator<IIter>::value,
+                                    int>::type = 0>
+  deque(IIter first, IIter last) {
+    copy_init(first, last, iterator_category(first));
+  }
+
+  deque(std::initializer_list<value_type> ilist) {
+    copy_init(ilist.begin(), ilist.end(), mystl::forward_iterator_tag());
+  }
+
+  deque(const deque &rhs) {
+    copy_init(rhs.begin(), rhs.end(), mystl::forward_iterator_tag);
+  }
+  deque(deque &&rhs) noexcept
+      : begin_(mystl::move(rhs.begin_)), end_(mystl::move(rhs.end_)),
+        map_(mystl::move(rhs.map_)), map_size_(rhs.map_size_) {
+    rhs.begin_ = iterator();
+    rhs.end_ = iterator();
+    rhs.map_ = nullptr;
+    rhs.map_size_ = 0;
+  }
+
+  deque &operator=(const deque &rhs);
+  deque &operator=(deque &&rhs);
+
+  deque &operator=(std::initializer_list<value_type> ilist) {
+    deque tmp(ilist);
+    swap(tmp);
+    return *this;
+  }
+
+  ~deque() {
+    if (map_ != nullptr) {
+      clear();
+      data_allocator::deallocate(*begin_.node, buffer_size);
+      *begin_.node = nullptr;
+      map_allocator::deallocate(map_, map_size_);
+      map_ = nullptr;
+    }
+  }
+
+public:
+  // 迭代器操作
+
+  // erase / clear
+
+  iterator erase(iterator position);
+  iterator erase(iterator first, iterator last);
+  void clear();
+
+  // swap
+  void swap(deque &rhs) noexcept;
 };
+/************************************************************/
+
+// 移动赋值运算符号
+template <class T> deque<T> &deque<T>::operator=(deque &&rhs) {
+  if (this != &rhs) {
+    deque(mystl::move(rhs)).swap(*this);
+  }
+  return *this;
+}
+
+// 删除[first,last)上的元素
+template <class T>
+typename deque<T>::iterator deque<T>::erase(iterator first, iterator last) {
+  if (first == begin_ && last == end_) {
+    clear();
+    return end_;
+  } else {
+    const size_type len = last - first;
+    const size_type elems_before = first - begin_;
+    const size_type elems_after = size() - len - elems_before;
+
+    if (elems_before < elems_after) {
+      // 前面的元素比较少，向前移动
+      mystl::copy_backward(begin_, first, last);
+      auto new_begin = begin_ + len;
+      mystl::destroy(begin_, new_begin);
+      for (map_pointer node = begin_.node; node < new_begin.node; ++node) {
+        data_allocator::deallocate(*node, buffer_size);
+      }
+      begin_ = new_begin;
+    } else {
+      // 后面的元素比较少
+      mystl::copy(last, end_, first);
+      auto new_end = end_ - len;
+
+      mystl::destroy(new_end, end_);
+      for (map_pointer node = new_end.node + 1; node <= end_.node; ++node) {
+        data_allocator::deallocate(*node, buffer_size);
+      }
+      end_ = new_end;
+    }
+    return begin_ + elems_before;
+  }
+}
+
+// 清空 deque
+template <class T> void deque<T>::clear() {
+  // clear 会保留头部的缓冲区
+  for (map_pointer cur = begin_.node + 1; cur < end_.node; ++cur) {
+    data_allocator::destroy(*cur, *cur + buffer_size);
+    data_allocator::deallocate(*cur, buffer_size);
+  }
+  if (begin_.node != end_.node) { // 有两个以上的缓冲区
+    mystl::destroy(begin_.cur, begin_.last);
+    mystl::destroy(end_.first, end_.cur);
+    data_allocator::deallocate(*end_.node, buffer_size);
+  } else {
+    mystl::destroy(begin_.cur, end_.cur);
+  }
+  shrink_to_fit();
+  end_ = begin_;
+}
+
+// 交换两个swap
+template <class T> void deque<T>::swap(deque &rhs) noexcept {
+  if (this != &rhs) {
+    mystl::swap(begin_, rhs.begin_);
+    mystl::swap(end_, rhs.end_);
+    mystl::swap(map_, rhs.map_);
+    mystl::swap(map_size_, rhs.map_size_);
+  }
+}
 } // namespace mystl
 
 #endif // !MYTINYSTL_DUQUE_H

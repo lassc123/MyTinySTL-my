@@ -266,6 +266,34 @@ public:
 public:
   // 迭代器操作
 
+  iterator begin() noexcept { return begin_; }
+  const_iterator begin() const noexcept { return begin_; }
+  iterator end() noexcept { return end_; }
+  const_iterator end() const noexcept { return end_; }
+
+  reverse_iterator rbegin() noexcept { return reverse_iterator(end()); }
+  const_reverse_iterator rbegin() const noexcept {
+    return const_reverse_iterator(end());
+  }
+
+  reverse_iterator rend() noexcept { return reverse_iterator(begin()); }
+  const_reverse_iterator rend() const noexcept {
+    return const_reverse_iterator(begin());
+  }
+
+  const_iterator cbegin() const noexcept { return begin(); }
+  const_iterator cend() const noexcept { return end(); }
+  const_reverse_iterator crbegin() const noexcept { return rbegin(); }
+  const_reverse_iterator crend() const noexcept { return rend(); }
+
+  // 容量相关操作
+  bool empty() const noexcept { return begin() == end(); }
+  size_type size() const noexcept { return end_ - begin_; }
+  size_type max_size() const noexcept { return static_cast<size_type>(-1); }
+  void resize(size_type new_size) { resize(new_size, value_type()); }
+  void resize(size_type new_size, const value_type &value);
+  void shrink_to_fit() noexcept;
+
   // erase / clear
 
   iterator erase(iterator position);
@@ -274,8 +302,25 @@ public:
 
   // swap
   void swap(deque &rhs) noexcept;
+
+private:
+  // cleanup
+  void destroy_elements_and_buffers();
 };
 /************************************************************/
+template <class T> deque<T> &deque<T>::operator=(const deque &rhs) {
+  if (this != &rhs) {
+    const auto len = size();
+    if (len >= rhs.size()) {
+      erase(mystl::copy(rhs.begin_, rhs.end_, begin_), end_);
+    } else {
+      iterator mid = rhs.begin() + static_cast<difference_type>(len);
+      mystl::copy(rhs.begin_, mid, begin_);
+      insert(end_, mid, rhs.end_);
+    }
+  }
+  return *this;
+}
 
 // 交换两个swap
 template <class T> void deque<T>::swap(deque &rhs) noexcept {
@@ -285,6 +330,19 @@ template <class T> void deque<T>::swap(deque &rhs) noexcept {
     mystl::swap(map_, rhs.map_);
     mystl::swap(map_size_, rhs.map_size_);
   }
+}
+
+/*****************************************************************************************/
+// helper function
+
+// destroy_elements_and_buffers 函数
+template <class T> void deque<T>::destroy_elements_and_buffers() {
+  if (!empty()) {
+    // 析构所有元素
+    clear();
+  }
+  // 释放所有缓冲区
+  destroy_buffer(begin_.node, end_.node);
 }
 } // namespace mystl
 

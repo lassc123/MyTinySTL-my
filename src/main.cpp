@@ -2,6 +2,7 @@
 #include "../include/algobase.h"
 #include "../include/allocator.h"
 #include "../include/construct.h"
+#include "../include/deque.h"
 #include "../include/functional.h"
 #include "../include/heap_algo.h"
 #include "../include/iterator.h"

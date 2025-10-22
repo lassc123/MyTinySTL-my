@@ -7,6 +7,7 @@
 #include "../include/heap_algo.h"
 #include "../include/iterator.h"
 #include "../include/list.h"
+#include "../include/rb_tree.h"
 #include "../include/type_traits.h"
 #include "../include/uninitialized.h"
 #include "../include/util.h"
